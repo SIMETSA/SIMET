@@ -1,0 +1,514 @@
+<!DOCTYPE html> 
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Inventario de Bodega</title>
+
+  <!-- Fuentes e íconos -->
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css"/>
+  
+  <!-- Librerías JS necesarias -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.28/jspdf.plugin.autotable.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+
+  <style>
+    * { font-family: 'Poppins', sans-serif; margin: 0; padding: 0; box-sizing: border-box; }
+    body { background-color: #f4f4f4; color: #333; display: flex; }
+    header { background: #ADD8E6; padding: 15px 20px; color: black; display: flex; align-items: center; justify-content: space-between; box-shadow: 0 3px 6px rgba(0,0,0,0.2); }
+    header h1 { font-size: 1.2rem; display: flex; align-items: center; }
+    header h1 img { width: 40px; margin-right: 10px; }
+
+    /* Sidebar */
+    .sidebar {
+      background: #ADD8E6; width: 220px; height: 100vh; position: fixed; top: 0; left: 0;
+      display: flex; flex-direction: column; padding: 20px; box-shadow: 2px 0 6px rgba(0,0,0,0.2);
+    }
+    .sidebar h2 { color: black; font-size: 1.2rem; margin-bottom: 20px; }
+    .sidebar a {
+      color: black; text-decoration: none; margin: 10px 0; font-weight: 500; display: flex; align-items: center;
+    }
+    .sidebar a i { margin-right: 10px; }
+    .sidebar a:hover { color: #ffc107; }
+
+    /* Contenedor principal */
+    .main { margin-left: 240px; padding: 20px; width: calc(100% - 240px); }
+    .card { background: #fff; padding: 20px; border-radius: 10px; margin-bottom: 20px; box-shadow: 0 4px 8px rgba(0,0,0,0.05); }
+    h2, h3 { margin-bottom: 15px; color: #1e3a5f; }
+    input, select, button, textarea {
+      padding: 8px; margin: 6px 0; border-radius: 5px; border: 1px solid #ccc; width: 100%;
+    }
+    button {
+      background-color: #ADD8E6; color: black; border: none; cursor: pointer; font-weight: 600;
+      transition: 0.3s; padding: 8px 12px; border-radius: 5px;
+    }
+    button:hover { background-color: #345b89; color: white; }
+    table { width: 100%; border-collapse: collapse; margin-top: 15px; }
+    th, td { padding: 10px; text-align: center; border: 1px solid #ddd; }
+    th { background: #1e3a5f; color: white; }
+    tr:nth-child(even) { background: #f9f9f9; }
+    tr:hover { background: #eef3fa; }
+    td img { max-width: 50px; max-height: 50px; border-radius: 6px; }
+    .stock-bajo { background-color: #f8d7da !important; color: #842029; font-weight: bold; }
+    .estado-agotado { background-color: #6c757d !important; color: #fff; font-weight: bold; }
+    .hidden { display: none; }
+    .search-bar { margin: 10px 0 20px; }
+    .dashboard { display: flex; gap: 20px; flex-wrap: wrap; }
+    .dashboard .card { flex: 1; min-width: 220px; text-align: center; }
+    canvas { max-width: 100%; }
+  </style>
+</head>
+<body>
+  <!-- Sidebar -->
+  <div class="sidebar">
+    <h2><img src="logo pesas.png" width="40"> Inventario</h2>
+    <a href="#dashboard"><i class="fas fa-chart-pie"></i> Dashboard</a>
+    <a href="#inventario"><i class="fas fa-boxes"></i> Entrada de Inventario</a>
+    <a href="#reportes"><i class="fas fa-file-invoice"></i> Salida de Inventario</a>
+    <a href="#historial"><i class="fas fa-history"></i> Historial</a>
+    <a href="#" onclick="logout()"><i class="fas fa-sign-out-alt"></i> Cerrar Sesión</a>
+  </div>
+
+  <!-- Main -->
+  <div class="main">
+    <!-- Login -->
+    <div id="loginContainer" class="card">
+      <h2>🔑 Iniciar Sesión</h2>
+      <label>Usuario:</label>
+      <input type="text" id="loginUsuario">
+      <label>Contraseña:</label>
+      <input type="password" id="loginPassword">
+      <button onclick="login()">Ingresar</button>
+    </div>
+
+    <!-- App -->
+    <div id="appContainer" class="hidden">
+      <!-- Dashboard -->
+      <div id="dashboard" class="card">
+        <h3>📊 Dashboard</h3>
+        <div class="dashboard">
+          <div class="card"><h4>Total Productos</h4><p id="totalProductos">0</p></div>
+          <div class="card"><h4>Stock Bajo</h4><p id="stockBajo">0</p></div>
+          <div class="card"><h4>Valor Inventario</h4><p id="valorInventario">Q0.00</p></div>
+        </div>
+        <canvas id="graficaStock"></canvas>
+      </div>
+
+      <!-- Entrada de Inventario -->
+      <div id="inventario" class="card">
+        <h3>➕ Agregar Producto</h3>
+        <form id="formAgregar">
+          <label>Foto:</label><input type="file" id="foto" accept="image/*" required>
+          <label>Código:</label><input type="text" id="codigo" required>
+          <label>Cantidad:</label><input type="number" id="cantidad" required>
+          <label>Marca:</label><input type="text" id="marca" required>
+          <label>Modelo:</label><input type="text" id="modelo" required>
+          <label>Capacidad:</label><input type="text" id="capacidad" required>
+          <label>Serie:</label><input type="text" id="serie" required>
+          <label>Descripción:</label><input type="text" id="descripcion" required>
+          <div id="preciosContainer" class="hidden">
+            <label>Precio costo:</label><input type="number" id="precioCosto" step="0.01">
+            <label>Precio venta:</label><input type="number" id="precioVenta" step="0.01">
+          </div>
+          <button type="submit">Agregar</button>
+        </form>
+        <div class="search-bar"><input type="text" id="searchInput" placeholder="🔍 Buscar producto..."></div>
+        <button onclick="exportarExcel()">📥 Exportar a Excel</button>
+        <button onclick="exportarInventarioPDF()">📥 Exportar a PDF</button>
+        <table id="tablaInventario">
+          <thead>
+            <tr>
+              <th>Foto</th><th>Cantidad</th><th>Estado</th><th>Código</th><th>Marca</th><th>Modelo</th>
+              <th>Capacidad</th><th>Serie</th><th>Descripción</th>
+              <th>Precio costo</th><th>Precio venta</th><th>Observaciones</th><th>Acciones</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+
+      <!-- Salida de Inventario -->
+      <div id="reportes" class="card">
+        <h3>📑 Salida de Inventario / Generar Factura</h3>
+        <form id="formSalida">
+          <label>Vendedor:</label><input type="text" id="salidavendedor" required>
+          <label>Cliente:</label><input type="text" id="salidaNombre" required>
+          <label>Contacto:</label><input type="text" id="salidaContacto" required>
+          <label>Dirección:</label><input type="text" id="salidaDireccion" required>
+          <label>Teléfono:</label><input type="text" id="salidaTelefono" required>
+          <label>Horario:</label><input type="text" id="salidaHorario" required>
+          <label>Producto:</label>
+          <select id="salidaProducto" required></select>
+          <label>Cantidad:</label><input type="number" id="salidaCantidad" required>
+          <button type="submit">Generar Factura PDF</button>
+        </form>
+      </div>
+
+      <!-- Historial -->
+      <div id="historial" class="card hidden historial">
+        <h3>📜 Historial</h3>
+        <button onclick="exportarHistorialPDF()">📥 Exportar Historial PDF</button>
+        <ul id="listaHistorial"></ul>
+        <button onclick="limpiarHistorial()">Eliminar Todo</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // ------------------------------
+    const usuarios = { "admin": "1234", "trabajador": "abcd" };
+    let usuarioActivo = null;
+    let inventario = JSON.parse(localStorage.getItem("inventario")) || [];
+    let historial = JSON.parse(localStorage.getItem("historial")) || [];
+    let numeroFactura = JSON.parse(localStorage.getItem("numeroFactura")) || 1;
+
+    const loginContainer = document.getElementById("loginContainer");
+    const appContainer = document.getElementById("appContainer");
+    const preciosContainer = document.getElementById("preciosContainer");
+    const historialContainer = document.getElementById("historial");
+    const salidaProductoSelect = document.getElementById("salidaProducto");
+
+    // ------------------------------
+    function login() {
+      const user = document.getElementById("loginUsuario").value.toLowerCase();
+      const pass = document.getElementById("loginPassword").value;
+      if (usuarios[user] && usuarios[user] === pass) {
+        usuarioActivo = user;
+        loginContainer.classList.add("hidden");
+        appContainer.classList.remove("hidden");
+
+        if (usuarioActivo === "admin") {
+          preciosContainer.classList.remove("hidden");
+          historialContainer.classList.remove("hidden");
+        } else {
+          preciosContainer.classList.add("hidden");
+          historialContainer.classList.add("hidden");
+        }
+
+        renderInventario();
+        cargarHistorial();
+        actualizarDashboard();
+        actualizarSelectSalida();
+      } else {
+        alert("Credenciales incorrectas");
+      }
+    }
+
+    function logout() {
+      usuarioActivo = null;
+      appContainer.classList.add("hidden");
+      loginContainer.classList.remove("hidden");
+    }
+
+    // ------------------------------
+    function guardarInventario() {
+      localStorage.setItem("inventario", JSON.stringify(inventario));
+    }
+
+    function renderInventario() {
+      const tabla = document.querySelector("#tablaInventario tbody");
+      tabla.innerHTML = "";
+
+      inventario.forEach((item, index) => {
+        let fila = tabla.insertRow();
+        if (parseInt(item.cantidad) <= 5) fila.classList.add("stock-bajo");
+
+        let estado = "";
+        if (item.cantidad == 0) estado = "<span class='estado-agotado'>Agotado</span>";
+        else if (item.cantidad <= 5) estado = "<span class='estado-stock estado-bajo'>Bajo</span>";
+        else estado = "<span class='estado-stock estado-normal'>Normal</span>";
+
+        fila.innerHTML = `
+          <td><img src="${item.foto}" alt="Foto"/></td>
+          <td contenteditable="true" onblur="actualizarCantidad(${index}, this.innerText)">${item.cantidad}</td>
+          <td>${estado}</td>
+          <td>${item.codigo}</td>
+          <td>${item.marca}</td>
+          <td>${item.modelo}</td>
+          <td>${item.capacidad}</td>
+          <td>${item.serie}</td>
+          <td>${item.descripcion}</td>
+          <td>${usuarioActivo==='admin'?item.precioCosto:''}</td>
+          <td>${usuarioActivo==='admin'?item.precioVenta:''}</td>
+          <td contenteditable="true" onblur="actualizarObs(${index}, this.innerText)">${item.observaciones||""}</td>
+          <td><button onclick="eliminarProducto(${index})">Eliminar</button></td>
+        `;
+      });
+
+      actualizarDashboard();
+      actualizarSelectSalida();
+    }
+
+    function actualizarCantidad(i, valor) {
+      inventario[i].cantidad = parseInt(valor) || 0;
+      guardarInventario();
+      registrarHistorial(`${usuarioActivo} modificó cantidad de ${inventario[i].descripcion} a ${valor}`);
+      renderInventario();
+    }
+
+    function actualizarObs(i, valor) {
+      inventario[i].observaciones = valor;
+      guardarInventario();
+    }
+
+    function eliminarProducto(i) {
+      registrarHistorial(`${usuarioActivo} eliminó ${inventario[i].descripcion}`);
+      inventario.splice(i, 1);
+      guardarInventario();
+      renderInventario();
+    }
+
+    // ------------------------------
+    document.getElementById("formAgregar").addEventListener("submit", function(e){
+      e.preventDefault();
+      const file = document.getElementById("foto").files[0];
+      const reader = new FileReader();
+      reader.onload = function(ev){
+        const codigoNuevo = document.getElementById("codigo").value;
+        const descripcionNueva = document.getElementById("descripcion").value;
+        const cantidadNueva = parseInt(document.getElementById("cantidad").value);
+        const itemExistente = inventario.find(p => p.codigo === codigoNuevo);
+        if(itemExistente){
+          itemExistente.cantidad += cantidadNueva;
+          registrarHistorial(`${usuarioActivo} ingresó ${cantidadNueva} unidades de ${descripcionNueva}`);
+        } else {
+          const nuevo = {
+            foto: ev.target.result,
+            codigo: codigoNuevo,
+            cantidad: cantidadNueva,
+            marca: document.getElementById("marca").value,
+            modelo: document.getElementById("modelo").value,
+            capacidad: document.getElementById("capacidad").value,
+            serie: document.getElementById("serie").value,
+            descripcion: descripcionNueva,
+            precioCosto: document.getElementById("precioCosto").value || "",
+            precioVenta: document.getElementById("precioVenta").value || "",
+            observaciones: ""
+          };
+          inventario.push(nuevo);
+          registrarHistorial(`${usuarioActivo} agregó producto ${descripcionNueva}`);
+        }
+        guardarInventario();
+        renderInventario();
+        e.target.reset();
+      }
+      reader.readAsDataURL(file);
+    });
+
+    // ------------------------------
+    function actualizarSelectSalida() {
+  salidaProductoSelect.innerHTML = "";
+  inventario.forEach(p => {
+    const option = document.createElement("option");
+    option.value = p.codigo; // <- usar el código como valor único
+    option.textContent = `${p.descripcion} (${p.cantidad} uds)`; // texto visible
+    salidaProductoSelect.appendChild(option);
+  });
+}
+
+
+    document.getElementById("searchInput").addEventListener("keyup", function() {
+      let filtro = this.value.toLowerCase();
+      document.querySelectorAll("#tablaInventario tbody tr").forEach(row => {
+        row.style.display = row.innerText.toLowerCase().includes(filtro) ? "" : "none";
+      });
+    });
+
+    // ------------------------------
+   // ------------------------------
+// Formulario de salida / generar factura
+document.getElementById("formSalida").addEventListener("submit", function(e) {
+  e.preventDefault();
+
+  const cantidadSalida = parseInt(document.getElementById("salidaCantidad").value);
+  const productoSalida = document.getElementById("salidaProducto").value;
+
+  // Buscar el producto por CÓDIGO (no por descripción)
+  const item = inventario.find(p => p.codigo === productoSalida);
+
+  if (!item) {
+    alert("Producto no encontrado en inventario");
+    return;
+  }
+
+  if (item.cantidad < cantidadSalida) {
+    alert("No hay suficiente stock");
+    return;
+  }
+
+  // Descontar inventario
+  item.cantidad -= cantidadSalida;
+  guardarInventario();
+  renderInventario();
+
+  // Datos de factura
+  const reporte = {
+    vendedor: document.getElementById("salidavendedor").value,
+    nombre: document.getElementById("salidaNombre").value,
+    contacto: document.getElementById("salidaContacto").value,
+    direccion: document.getElementById("salidaDireccion").value,
+    telefono: document.getElementById("salidaTelefono").value,
+    horario: document.getElementById("salidaHorario").value,
+    producto: item.descripcion, // aquí mostramos la descripción en la factura
+    cantidad: cantidadSalida,
+    precioUnitario: parseFloat(item.precioVenta || 0),
+    fecha: new Date().toLocaleString(),
+    factura: "F" + String(numeroFactura).padStart(4, "0")
+  };
+
+  // Registrar en historial
+  registrarHistorial(`${usuarioActivo} generó ${reporte.factura}: ${reporte.cantidad} x ${reporte.producto} para ${reporte.nombre}`);
+
+  // Generar PDF de la factura
+  generarFacturaPDF(reporte);
+
+  // Incrementar número de factura
+  numeroFactura++;
+  localStorage.setItem("numeroFactura", JSON.stringify(numeroFactura));
+
+  e.target.reset();
+});
+
+// ------------------------------
+// Función para generar PDF
+function generarFacturaPDF(reporte) {
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF();
+  let y = 20;
+
+  doc.setFontSize(18);
+  doc.text("FACTURA", 20, y); y += 10;
+
+  doc.setFontSize(12);
+  doc.text(`Factura No: ${reporte.factura}`, 20, y);
+  doc.text(`Fecha: ${reporte.fecha}`, 140, y); y += 10;
+
+  doc.text(`Vendedor: ${reporte.vendedor}`, 20, y); y += 6;
+  doc.text(`Cliente: ${reporte.nombre}`, 20, y); y += 6;
+  doc.text(`Contacto: ${reporte.contacto}`, 20, y); y += 6;
+  doc.text(`Dirección: ${reporte.direccion}`, 20, y); y += 6;
+  doc.text(`Teléfono: ${reporte.telefono}`, 20, y); y += 6;
+  doc.text(`Horario: ${reporte.horario}`, 20, y); y += 10;
+
+  // Tabla usando autoTable
+  let total = reporte.cantidad * reporte.precioUnitario;
+  doc.autoTable({
+    startY: y,
+    head: [['Producto','Cantidad','P. Unitario','Total']],
+    body: [[reporte.producto, reporte.cantidad, `Q${reporte.precioUnitario.toFixed(2)}`, `Q${total.toFixed(2)}`]],
+    theme: 'grid',
+    headStyles: { fillColor: [30, 58, 95], textColor: [255,255,255] }
+  });
+  y = doc.lastAutoTable.finalY + 10;
+
+  let iva = total * 0.12;
+  let granTotal = total + iva;
+  doc.text(`Subtotal: Q${total.toFixed(2)}`, 140, y); y += 6;
+  doc.text(`IVA 12%: Q${iva.toFixed(2)}`, 140, y); y += 6;
+  doc.text(`TOTAL: Q${granTotal.toFixed(2)}`, 140, y); y += 10;
+
+  doc.text("_______________________", 20, y);
+  doc.text("Firma de entrega", 20, y + 6);
+
+  doc.save(`${reporte.factura}_${reporte.nombre}.pdf`);
+}
+
+
+    // ------------------------------
+    function registrarHistorial(texto) {
+      historial.push(`${new Date().toLocaleString()} - ${texto}`);
+      localStorage.setItem("historial", JSON.stringify(historial));
+      cargarHistorial();
+    }
+
+    function cargarHistorial() {
+      const ul = document.getElementById("listaHistorial");
+      ul.innerHTML = "";
+      historial.forEach(h => { let li = document.createElement("li"); li.textContent = h; ul.appendChild(li); });
+    }
+
+    function limpiarHistorial() {
+      if(confirm("¿Deseas eliminar todo el historial?")){
+        historial = [];
+        localStorage.setItem("historial", JSON.stringify(historial));
+        cargarHistorial();
+      }
+    }
+
+    // ------------------------------
+    function actualizarDashboard() {
+      document.getElementById("totalProductos").innerText = inventario.length;
+      document.getElementById("stockBajo").innerText = inventario.filter(p=>p.cantidad<=5).length;
+      let valor = inventario.reduce((acc,p)=>acc + (parseFloat(p.precioCosto)||0)*p.cantidad,0);
+      document.getElementById("valorInventario").innerText = `Q${valor.toFixed(2)}`;
+
+      const ctx = document.getElementById("graficaStock").getContext('2d');
+      if(window.grafica) window.grafica.destroy();
+      window.grafica = new Chart(ctx, {
+        type: 'pie',
+        data: {
+          labels: ['Normal', 'Bajo', 'Agotado'],
+          datasets: [{
+            label: 'Stock',
+            data: [
+              inventario.filter(p=>p.cantidad>5).length,
+              inventario.filter(p=>p.cantidad>0 && p.cantidad<=5).length,
+              inventario.filter(p=>p.cantidad==0).length
+            ],
+            backgroundColor: ['#28a745','#ffc107','#dc3545']
+          }]
+        }
+      });
+    }
+
+    // ------------------------------
+    function exportarExcel() {
+  if(inventario.length === 0){
+    alert("No hay productos para exportar");
+    return;
+  }
+
+  // Crear un arreglo solo con los datos relevantes
+  const data = inventario.map(p => ({
+    Código: p.codigo,
+    Descripción: p.descripcion,
+    Cantidad: p.cantidad,
+    Marca: p.marca,
+    Modelo: p.modelo,
+    Capacidad: p.capacidad,
+    Serie: p.serie,
+    "Precio Costo": p.precioCosto || "",
+    "Precio Venta": p.precioVenta || "",
+    Observaciones: p.observaciones || ""
+  }));
+
+  // Crear libro y hoja
+  const wb = XLSX.utils.book_new();
+  const ws = XLSX.utils.json_to_sheet(data);
+  XLSX.utils.book_append_sheet(wb, ws, "Inventario");
+
+  // Descargar archivo
+  XLSX.writeFile(wb, "Inventario.xlsx");
+}
+
+
+    function exportarInventarioPDF() {
+      const { jsPDF } = window.jspdf;
+      const doc = new jsPDF();
+      const body = inventario.map(p => [p.codigo,p.descripcion,p.cantidad,p.marca,p.modelo,p.capacidad,p.serie,p.precioCosto,p.precioVenta]);
+      doc.autoTable({ head:[['Código','Descripción','Cantidad','Marca','Modelo','Capacidad','Serie','Precio Costo','Precio Venta']], body });
+      doc.save("Inventario.pdf");
+    }
+
+    function exportarHistorialPDF() {
+      const { jsPDF } = window.jspdf;
+      const doc = new jsPDF();
+      historial.forEach((h,i)=>doc.text(`${i+1}. ${h}`, 10, 10 + i*10));
+      doc.save("Historial.pdf");
+    }
+  </script>
+</body>
+</html>
